@@ -5,6 +5,16 @@ import { v4 as uuidv4 } from 'uuid';
 // 简单的内存存储（生产环境用数据库）
 const results = new Map<string, any>();
 
+// 演示模式的模拟SEO数据
+const MOCK_SEO_RESULT = {
+  title: { score: 72, current: 'Example Domain', suggestion: '标题长度适中，建议添加核心关键词' },
+  metaDescription: { score: 58, current: '', suggestion: '添加Meta描述，建议120-160字符' },
+  keywords: { score: 65, current: '首页关键词未设置', suggestion: '建议在内容中融入目标关键词3-5次' },
+  readability: { score: 88, current: '内容简洁易读', suggestion: '继续保持当前的段落长度' },
+  structuredData: { score: 45, current: '缺少结构化数据', suggestion: '建议添加Organization或WebSite的JSON-LD结构化数据' },
+  overall: 65,
+};
+
 export async function POST(request: NextRequest) {
   try {
     const { url, email } = await request.json();
@@ -16,28 +26,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 抓取页面内容
-    const pageResponse = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SEO-Grader-Bot/1.0)',
-      },
-    });
+    let html = '';
+    let useMock = false;
 
-    if (!pageResponse.ok) {
-      return NextResponse.json(
-        { error: 'Failed to fetch the URL' },
-        { status: 400 }
-      );
+    // 尝试抓取页面内容
+    try {
+      const pageResponse = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Grader-Bot/1.0)',
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (pageResponse.ok) {
+        html = await pageResponse.text();
+      } else {
+        useMock = true;
+      }
+    } catch {
+      // 抓取失败，使用演示模式
+      useMock = true;
     }
 
-    const html = await pageResponse.text();
+    let scores, improvements;
 
-    // 提取页面内容（简化版）
-    const content = extractTextFromHTML(html);
+    if (useMock || !html) {
+      // 演示模式
+      scores = { ...MOCK_SEO_RESULT };
+      improvements = getImprovements(scores);
+    } else {
+      // 提取页面内容
+      const content = extractTextFromHTML(html);
 
-    // 调用AI分析
-    const scores = await analyzeSEOContent(url, content);
-    const improvements = getImprovements(scores);
+      // 调用AI分析
+      scores = await analyzeSEOContent(url, content);
+      improvements = getImprovements(scores);
+    }
 
     // 保存结果
     const id = uuidv4();
@@ -48,16 +72,17 @@ export async function POST(request: NextRequest) {
       scores,
       improvements,
       createdAt: new Date(),
+      demo: useMock,
     };
     results.set(id, result);
 
     // TODO: 发送邮件报告
 
-    return NextResponse.json({ id, scores, improvements });
-  } catch (error) {
+    return NextResponse.json({ id, scores, improvements, demo: useMock });
+  } catch (error: any) {
     console.error('Analysis error:', error);
     return NextResponse.json(
-      { error: 'Analysis failed' },
+      { error: error.message || 'Analysis failed' },
       { status: 500 }
     );
   }
