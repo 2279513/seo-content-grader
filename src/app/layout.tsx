@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './animations.css';
 
 export const metadata: Metadata = {
   title: 'AI SEO Content Grader - 5秒分析页面SEO',

@@ -9,7 +9,7 @@ export interface SEOScore {
 
 export interface ScoreItem {
   score: number;
-  status: 'good' | 'warning' | 'error';
+  status?: 'good' | 'warning' | 'error';
   current: string;
   suggestion: string;
 }

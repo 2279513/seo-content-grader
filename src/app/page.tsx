@@ -1,32 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SEOScore, ScoreItem } from '@/types';
+
+/* ── Animations ── */
+const FADE_UP = 'animate-fade-up';
+const STAGGER_DELAY = ['delay-0', 'delay-100', 'delay-200', 'delay-300', 'delay-400'];
 
 function ScoreCard({
   title,
   item,
   icon,
+  delay,
 }: {
   title: string;
   item: ScoreItem;
   icon: string;
+  delay: string;
 }) {
   const colorMap = {
-    good: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', dot: 'bg-emerald-500' },
-    warning: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-600', dot: 'bg-amber-500' },
-    error: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-600', dot: 'bg-rose-500' },
+    good: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
+    warning: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-600', dot: 'bg-amber-500', bar: 'bg-amber-500' },
+    error: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-600', dot: 'bg-rose-500', bar: 'bg-rose-500' },
   };
-  const c = colorMap[item.status];
+  const c = colorMap[item.status ?? (item.score >= 80 ? 'good' : item.score >= 60 ? 'warning' : 'error')];
+  const barColor = item.score >= 80 ? 'bg-emerald-500' : item.score >= 60 ? 'bg-amber-500' : 'bg-rose-500';
 
   return (
-    <div className={`${c.bg} border ${c.border} rounded-2xl p-6 transition-all hover:shadow-md`}>
+    <div
+      className={`${c.bg} border ${c.border} rounded-2xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 ${FADE_UP} ${delay} opacity-0`}
+      style={{ animationFillMode: 'forwards' }}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">{icon}</span>
           <span className="font-semibold text-gray-800">{title}</span>
         </div>
-        <div className={`w-3 h-3 rounded-full ${c.dot}`} />
+        <div className={`w-3 h-3 rounded-full ${c.dot} animate-pulse-subtle`} />
       </div>
       <div className="flex items-end gap-2 mb-4">
         <span className={`text-5xl font-bold ${c.text}`}>{item.score}</span>
@@ -34,11 +44,13 @@ function ScoreCard({
       </div>
       <div className="h-2 bg-gray-200 rounded-full mb-4 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all ${item.score >= 80 ? 'bg-emerald-500' : item.score >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`}
-          style={{ width: `${item.score}%` }}
+          className={`h-full rounded-full ${barColor} animate-bar`}
+          style={{ '--bar-target': `${item.score}%` } as React.CSSProperties}
         />
       </div>
-      <div className="text-sm text-gray-500 mb-2">当前: <span className="text-gray-700">{item.current || '未检测到'}</span></div>
+      <div className="text-sm text-gray-500 mb-2">
+        当前: <span className="text-gray-700">{item.current || '未检测到'}</span>
+      </div>
       <div className="text-sm bg-white/60 p-3 rounded-lg">
         <span className="text-gray-600">💡 {item.suggestion}</span>
       </div>
@@ -47,9 +59,23 @@ function ScoreCard({
 }
 
 function CircularScore({ score }: { score: number }) {
+  const [displayed, setDisplayed] = useState(0);
   const circumference = 2 * Math.PI * 45;
-  const offset = circumference - (score / 100) * circumference;
-  const color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+  const offset = circumference - (displayed / 100) * circumference;
+  const color = displayed >= 80 ? '#10b981' : displayed >= 60 ? '#f59e0b' : '#ef4444';
+
+  useEffect(() => {
+    let start = 0;
+    const duration = 1200;
+    const step = (timestamp: number) => {
+      if (!start) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayed(Math.round(eased * score));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [score]);
 
   return (
     <div className="relative w-32 h-32">
@@ -65,12 +91,35 @@ function CircularScore({ score }: { score: number }) {
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
-          className="transition-all duration-1000"
+          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.5s ease' }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-4xl font-bold text-gray-800">{score}</span>
+        <span className="text-4xl font-bold text-gray-800">{displayed}</span>
         <span className="text-xs text-gray-400">综合评分</span>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonCard({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div className="bg-slate-100 border border-slate-200 rounded-2xl p-6 animate-pulse">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">{icon}</span>
+          <span className="font-semibold text-gray-400">{title}</span>
+        </div>
+        <div className="w-3 h-3 rounded-full bg-slate-300" />
+      </div>
+      <div className="flex items-end gap-2 mb-4">
+        <div className="h-12 w-16 bg-slate-300 rounded-lg" />
+        <div className="h-4 w-8 bg-slate-200 rounded mb-2" />
+      </div>
+      <div className="h-2 bg-slate-200 rounded-full mb-4" />
+      <div className="space-y-2">
+        <div className="h-3 w-full bg-slate-200 rounded" />
+        <div className="h-3 w-3/4 bg-slate-200 rounded" />
       </div>
     </div>
   );
@@ -80,14 +129,19 @@ export default function Home() {
   const [url, setUrl] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<{ scores: SEOScore; improvements: string[] } | null>(null);
   const [error, setError] = useState('');
+  const [cardsVisible, setCardsVisible] = useState(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setAnalyzing(true);
     setError('');
     setResult(null);
+    setCardsVisible(false);
 
     try {
       const res = await fetch('/api/analyze', {
@@ -103,28 +157,31 @@ export default function Home() {
       }
 
       setResult({ scores: data.scores, improvements: data.improvements });
+      // 触发卡片入场动画
+      setTimeout(() => setCardsVisible(true), 100);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setAnalyzing(false);
     }
   };
 
   return (
     <main className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-md">
               <span className="text-white font-bold text-sm">SE</span>
             </div>
             <span className="font-bold text-lg text-slate-800">SEO Grader</span>
           </div>
           <nav className="flex items-center gap-6 text-sm">
-            <a href="#features" className="text-slate-600 hover:text-slate-900 transition">功能</a>
-            <a href="#pricing" className="text-slate-600 hover:text-slate-900 transition">定价</a>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition text-sm">
+            <a href="#features" className="text-slate-600 hover:text-slate-900 transition-colors">功能</a>
+            <a href="#pricing" className="text-slate-600 hover:text-slate-900 transition-colors">定价</a>
+            <button className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-md shadow-blue-500/20">
               开始使用
             </button>
           </nav>
@@ -152,7 +209,7 @@ export default function Home() {
             输入任意网页URL，AI在5秒内分析标题、Meta描述、关键词、可读性等5大维度，
             给出专业改进建议。竞品一半价格，却更快速精准。
           </p>
-          <div className="flex items-center justify-center gap-6 text-sm text-slate-500">
+          <div className="flex items-center justify-center gap-6 text-sm text-slate-500 flex-wrap">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
               无需注册即可试用
@@ -172,7 +229,7 @@ export default function Home() {
       {/* Analyze Form */}
       <section id="features" className="py-12 px-4">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-200">
+          <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-200 transition-all duration-300">
             <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">
               🔍 输入网页地址开始分析
             </h2>
@@ -187,7 +244,7 @@ export default function Home() {
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://yoursite.com"
                   required
-                  className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-lg"
+                  className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg placeholder:text-slate-400 focus:shadow-md focus:shadow-blue-500/10"
                 />
               </div>
               <div>
@@ -200,13 +257,13 @@ export default function Home() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@company.com"
                   required
-                  className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-lg"
+                  className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg placeholder:text-slate-400 focus:shadow-md focus:shadow-blue-500/10"
                 />
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold py-4 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-blue-500/25 text-lg"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold py-4 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-blue-500/25 text-lg disabled:cursor-not-allowed relative overflow-hidden"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-3">
@@ -214,7 +271,7 @@ export default function Home() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                     </svg>
-                    AI 分析中，请稍候...
+                    AI 正在分析页面...
                   </span>
                 ) : (
                   '🚀 立即分析 SEO 健康度'
@@ -223,7 +280,7 @@ export default function Home() {
             </form>
 
             {error && (
-              <div className="mt-5 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600">
+              <div className="mt-5 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 animate-shake">
                 ❌ {error}
               </div>
             )}
@@ -231,40 +288,77 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Results */}
-      {result && (
+      {/* Skeleton during analysis */}
+      {analyzing && (
         <section className="py-12 px-4">
           <div className="max-w-5xl mx-auto">
             <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-200">
               <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-6">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-800 mb-2">📊 SEO 分析报告</h2>
-                  <p className="text-slate-500 text-sm">{url}</p>
+                  <p className="text-slate-500 text-sm animate-pulse">{url}</p>
+                </div>
+                <div className="w-32 h-32 rounded-full bg-slate-100 animate-pulse flex items-center justify-center">
+                  <span className="text-slate-400 text-sm">计算中...</span>
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-5 mb-8">
+                <SkeletonCard icon="📝" title="标题 Title" />
+                <SkeletonCard icon="📄" title="Meta 描述" />
+                <SkeletonCard icon="🔑" title="关键词布局" />
+                <SkeletonCard icon="📖" title="内容可读性" />
+              </div>
+              <div className="md:col-span-2">
+                <SkeletonCard icon="🏗️" title="结构化数据" />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Results */}
+      {result && (
+        <section className="py-12 px-4" ref={resultRef}>
+          <div className="max-w-5xl mx-auto">
+            <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-200 transition-all duration-500">
+              <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">📊 SEO 分析报告</h2>
+                  <p className="text-slate-500 text-sm truncate max-w-xs">{url}</p>
                 </div>
                 <CircularScore score={result.scores.overall} />
               </div>
 
               <div className="grid md:grid-cols-2 gap-5 mb-8">
-                <ScoreCard title="标题 Title" item={result.scores.title} icon="📝" />
-                <ScoreCard title="Meta 描述" item={result.scores.metaDescription} icon="📄" />
-                <ScoreCard title="关键词布局" item={result.scores.keywords} icon="🔑" />
-                <ScoreCard title="内容可读性" item={result.scores.readability} icon="📖" />
+                {cardsVisible && (
+                  <>
+                    <ScoreCard title="标题 Title" item={result.scores.title} icon="📝" delay="delay-0" />
+                    <ScoreCard title="Meta 描述" item={result.scores.metaDescription} icon="📄" delay="delay-100" />
+                    <ScoreCard title="关键词布局" item={result.scores.keywords} icon="🔑" delay="delay-200" />
+                    <ScoreCard title="内容可读性" item={result.scores.readability} icon="📖" delay="delay-300" />
+                  </>
+                )}
               </div>
 
-              <div className="md:col-span-2">
-                <ScoreCard title="结构化数据" item={result.scores.structuredData} icon="🏗️" />
-              </div>
+              {cardsVisible && (
+                <div className="md:col-span-2">
+                  <ScoreCard title="结构化数据" item={result.scores.structuredData} icon="🏗️" delay="delay-400" />
+                </div>
+              )}
 
-              {result.improvements.length > 0 && (
-                <div className="mt-8 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6">
+              {result.improvements.length > 0 && cardsVisible && (
+                <div className="mt-8 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 animate-fade-up delay-500 opacity-0" style={{ animationFillMode: 'forwards' }}>
                   <h3 className="font-bold text-amber-800 mb-4 flex items-center gap-2">
                     <span className="text-xl">🎯</span> 优先改进建议
                   </h3>
                   <div className="space-y-3">
                     {result.improvements.map((item, i) => (
-                      <div key={i} className="flex gap-3 bg-white/60 p-3 rounded-xl">
-                        <span className="flex-shrink-0 w-6 h-6 bg-amber-500 text-white text-sm font-bold rounded-full flex items-center justify-center">{i + 1}</span>
-                        <span className="text-amber-900">{item.replace(/^\[\w+\]:\s*/, '')}</span>
+                      <div
+                        key={i}
+                        className="flex gap-3 bg-white/60 p-3 rounded-xl transition-all hover:bg-white/80 cursor-default"
+                      >
+                        <span className="flex-shrink-0 w-6 h-6 bg-amber-500 text-white text-sm font-bold rounded-full flex items-center justify-center text-xs">{i + 1}</span>
+                        <span className="text-amber-900">{item}</span>
                       </div>
                     ))}
                   </div>
@@ -308,7 +402,7 @@ export default function Home() {
             ].map((plan) => (
               <div
                 key={plan.name}
-                className={`relative rounded-3xl p-8 transition-all hover:-translate-y-1 ${
+                className={`relative rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1 ${
                   plan.highlight
                     ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-2xl shadow-blue-500/30 scale-105'
                     : 'bg-white border border-slate-200 hover:shadow-xl'
@@ -342,7 +436,7 @@ export default function Home() {
                   ))}
                 </ul>
                 <button
-                  className={`w-full py-3 rounded-xl font-semibold transition-all ${
+                  className={`w-full py-3 rounded-xl font-semibold transition-all active:scale-95 ${
                     plan.highlight
                       ? 'bg-white text-blue-600 hover:bg-blue-50'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
@@ -367,9 +461,9 @@ export default function Home() {
           </div>
           <p className="text-sm">© 2026 AI SEO Content Grader. All rights reserved.</p>
           <div className="flex gap-6 text-sm">
-            <a href="#" className="hover:text-white transition">Privacy</a>
-            <a href="#" className="hover:text-white transition">Terms</a>
-            <a href="#" className="hover:text-white transition">Contact</a>
+            <a href="#" className="hover:text-white transition-colors">Privacy</a>
+            <a href="#" className="hover:text-white transition-colors">Terms</a>
+            <a href="#" className="hover:text-white transition-colors">Contact</a>
           </div>
         </div>
       </footer>
